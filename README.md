@@ -1,8 +1,10 @@
-# Browser App v1
+# Browser App V4
 
-- `index.html`, `privacy-policy.html`, `manifest.json`, `sw.js`, icons, `vercel.json` - website (GitHub Pages / Vercel, no build step).
-- `android-app/` - Android Studio project (see `android-app/README.txt`).
-- `play_store_assets/` - Play Store icon, feature graphic, screenshots, listing text, privacy policy.
+Chrome-style browser PWA. No build step, no backend, no external services.
 
-Privacy policy URL after deploy: `https://YOUR-SITE/privacy-policy` (Vercel) or `https://USER.github.io/REPO/privacy-policy.html`.
-Replace `your-email@example.com` in `index.html` and both `privacy-policy.html` copies.
+- `index.html` - the whole app (opens straight to the Chrome-style home page)
+- `manifest.json`, `sw.js`, icons - PWA install + offline shell
+- `vercel.json` - optional static hosting headers
+
+All tabs, history, searches, bookmarks and settings are stored only in the browser's local storage on each device.
+Serve over HTTPS (GitHub Pages, Vercel, Netlify, ...) to enable "Install app" / "Add to Home Screen".

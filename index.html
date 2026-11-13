@@ -7,6 +7,10 @@
 <meta name="theme-color" content="#121419" media="(prefers-color-scheme: dark)">
 <title>Browser App</title>
 <link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Browser">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
@@ -154,6 +158,15 @@ svg.i{width:24px;height:24px;fill:currentColor;display:block;pointer-events:none
 .dbox input[type=text]{width:100%;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font:inherit;padding:0 14px;margin-top:8px}
 .dbtns{display:flex;justify-content:flex-end;gap:6px;margin-top:14px}
 .dbtns button{padding:12px 16px;border-radius:20px;color:var(--blue);font-weight:500;font-size:16px}
+#instBar{position:absolute;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));background:var(--menu);color:var(--tx);border-radius:22px;padding:16px 16px 10px;box-shadow:0 6px 24px rgba(0,0,0,.35);z-index:90;display:none}
+#instBar.on{display:block}
+#instBar .ir{display:flex;gap:14px;align-items:center}
+#instBar img{width:48px;height:48px;border-radius:12px;flex:none}
+#instBar b{display:block;font-size:17px;font-weight:500}
+#instBar small{display:block;color:var(--tx2);font-size:14px;line-height:1.35;margin-top:2px}
+#instBar .ib2{display:flex;justify-content:flex-end;gap:6px;margin-top:8px}
+#instBar .ib2 button{padding:10px 16px;border-radius:20px;color:var(--blue);font-weight:500;font-size:16px}
+#instBar .ib2 button.pri{background:var(--blue);color:var(--bg)}
 #toast{position:absolute;left:50%;bottom:48px;transform:translateX(-50%);background:#323232;color:#fff;padding:10px 18px;border-radius:20px;font-size:14px;z-index:120;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90%}
 #toast.on{opacity:1}
 </style>
@@ -245,34 +258,24 @@ svg.i{width:24px;height:24px;fill:currentColor;display:block;pointer-events:none
   </section>
 
   <div id="dlg"><div class="dbox" id="dbox"></div></div>
+  <div id="instBar"><div class="ir"><img src="icon-192.png" alt=""><div><b id="instT">Install Browser App</b><small id="instS">Add it to your home screen for a full-screen, app-like experience.</small></div></div><div class="ib2"><button id="instNo">Not now</button><button id="instGo" class="pri">Install</button></div></div>
   <div id="toast"></div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
 /* ============================================================
    Browser App - Chrome-style web browser (PWA)
-   - Opens on the START PAGE (like Chrome). Nothing loads until you choose.
-   - Firebase redirect_link/url = home page (if empty -> start page)
+   - Opens straight on the Chrome-style home page.
+   - Tabs, history, searches, bookmarks and settings are saved
+     only on this device (localStorage) - nothing is sent anywhere.
    ============================================================ */
-const FB_CONFIG = {
-  apiKey: "AIzaSyCHZR4prYhJ7Hrmo5Xw80xV3WSvhh8lBaI",
-  authDomain: "browserappredirectlinkapp.firebaseapp.com",
-  databaseURL: "https://browserappredirectlinkapp-default-rtdb.firebaseio.com",
-  projectId: "browserappredirectlinkapp",
-  storageBucket: "browserappredirectlinkapp.firebasestorage.app",
-  messagingSenderId: "510235000350",
-  appId: "1:510235000350:web:7e9921725eb11c9717780f"
-};
-const DB_PATH = 'redirect_link';
 const ENGINES = {
   google:{name:'Google', url:'https://www.google.com/search?igu=1&q='},
   bing:{name:'Bing', url:'https://www.bing.com/search?q='},
   ddg:{name:'DuckDuckGo', url:'https://duckduckgo.com/?q='},
   yahoo:{name:'Yahoo', url:'https://search.yahoo.com/search?p='}
 };
-const DEFAULT_TILES = [['Wikipedia','https://en.m.wikipedia.org'],['Archive','https://archive.org'],['Maps','https://www.openstreetmap.org'],['MDN','https://developer.mozilla.org'],['W3Schools','https://www.w3schools.com']];
+const DEFAULT_TILES = [['Google','https://www.google.com/webhp?igu=1'],['Wikipedia','https://en.m.wikipedia.org'],['Archive','https://archive.org'],['Maps','https://www.openstreetmap.org'],['MDN','https://developer.mozilla.org'],['W3Schools','https://www.w3schools.com']];
 
 const $ = s => document.querySelector(s);
 const store = {
@@ -280,7 +283,7 @@ const store = {
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 };
 let settings = Object.assign({ engine:'google', homeOn:true, homeUrl:'', theme:'system' }, store.get('settings', {}));
-let fbHome = null, tabs = [], activeId = null, uid = 0, fbTile = null, deferredInstall = null, swMode = 'n';
+let tabs = [], activeId = null, uid = 0, deferredInstall = null, swMode = 'n';
 
 /* ---------- helpers ---------- */
 const icon = n => '<svg class="i"><use href="#i-' + n + '"/></svg>';
@@ -291,11 +294,11 @@ function safeUrl(u){ try{ const x = new URL(String(u).trim(), location.href); re
 function hostOf(u){ try{ return new URL(u).host.replace(/^www\./,''); }catch(e){ return u || ''; } }
 function isUrlLike(raw){
   raw = raw.trim();
-  return /^https?:\/\//i.test(raw) || raw === 'privacy-policy.html' || (!/\s/.test(raw) && (/^[^\s]+\.[a-z]{2,}([\/?#:].*)?$/i.test(raw) || /^localhost(:\d+)?([\/?#].*)?$/i.test(raw)));
+  return /^https?:\/\//i.test(raw) || (!/\s/.test(raw) && (/^[^\s]+\.[a-z]{2,}([\/?#:].*)?$/i.test(raw) || /^localhost(:\d+)?([\/?#].*)?$/i.test(raw)));
 }
 function normalize(raw){
   raw = (raw || '').trim(); if(!raw) return null;
-  if(/^https?:\/\//i.test(raw) || raw === 'privacy-policy.html') return safeUrl(raw);
+  if(/^https?:\/\//i.test(raw)) return safeUrl(raw);
   if(isUrlLike(raw)) return safeUrl('https://' + raw);
   return engine().url + encodeURIComponent(raw);
 }
@@ -307,6 +310,33 @@ function applyTheme(){
 }
 function saveSettings(){ store.set('settings', settings); }
 applyTheme();
+
+/* ---------- tab persistence (this device only) ---------- */
+function saveTabs(){
+  const normal = tabs.filter(t => !t.incog); if(!normal.length) return;
+  let a = cur();
+  if(!a || a.incog){ const fb = store.get('tabs_active_fallback', null); a = normal.find(t => t.id === fb) || normal[0]; }
+  store.set('tabs_active_fallback', a.id);
+  store.set('tabs_v4', { uid, active: a.id, tabs: normal.map(t => ({ id:t.id, url:t.url, title:t.title, hist:t.hist, idx:t.idx, desktop:t.desktop })) });
+}
+function restoreTabs(){
+  const d = store.get('tabs_v4', null);
+  if(!d || !Array.isArray(d.tabs) || !d.tabs.length) return false;
+  d.tabs.forEach(o => {
+    if(!o || typeof o.id !== 'number') return;
+    const url = safeUrl(o.url) || '';
+    const hist = url && Array.isArray(o.hist) ? o.hist.filter(x => safeUrl(x)) : [];
+    if(url && !hist.length) hist.push(url);
+    tabs.push({ id:o.id, url, title:o.title || 'New tab', hist, idx: url ? Math.min(Math.max(o.idx | 0, 0), hist.length - 1) : -1, loading:false, desktop:!!o.desktop, frame:null, incog:false });
+    uid = Math.max(uid, o.id);
+  });
+  if(!tabs.length) return false;
+  uid = Math.max(uid, d.uid | 0);
+  activeId = tabs.some(t => t.id === d.active) ? d.active : tabs[0].id;
+  render(); return true;
+}
+addEventListener('pagehide', saveTabs);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') saveTabs(); });
 
 /* ---------- tabs ---------- */
 function newTab(url, incog){
@@ -372,7 +402,7 @@ function reload(){
   go(t, t.url, false);
 }
 function goHome(){
-  const t = cur(); const h = fbHome || (settings.homeOn ? safeUrl(settings.homeUrl) : null);
+  const t = cur(); const h = settings.homeOn ? safeUrl(settings.homeUrl) : null;
   if(h) go(t, h); else goStart(t);
 }
 
@@ -391,9 +421,8 @@ function finishProgress(t){
 /* ---------- start page (new tab page) ---------- */
 function tilesList(){
   const out = [];
-  if(fbTile) out.push([fbTile.title, fbTile.url]);
   const seen = new Set(out.map(o => hostOf(o[1])));
-  store.get('history', []).forEach(h => { const k = hostOf(h.url); if(out.length < 8 && !seen.has(k) && !/privacy-policy/.test(h.url) && h.url.indexOf(location.origin) !== 0){ seen.add(k); out.push([h.title && h.title !== k ? h.title : k, h.url]); } });
+  store.get('history', []).forEach(h => { const k = hostOf(h.url); if(out.length < 8 && !seen.has(k) && h.url.indexOf(location.origin) !== 0){ seen.add(k); out.push([h.title && h.title !== k ? h.title : k, h.url]); } });
   DEFAULT_TILES.forEach(d => { const k = hostOf(d[1]); if(out.length < 8 && !seen.has(k)){ seen.add(k); out.push(d); } });
   return out;
 }
@@ -419,6 +448,7 @@ function render(){
   document.documentElement.classList.toggle('incog', t.incog);
   const mine = tabsOfMode(t.incog);
   $('#tabCount').textContent = mine.length > 99 ? ':D' : mine.length;
+  if(t.url && !t.frame){ t.loading = true; ensureFrame(t).src = t.url; startProgress(t); }
   tabs.forEach(x => { if(x.frame) x.frame.classList.toggle('on', x.id === t.id && !!x.url); });
   const ntp = $('#ntp'); ntp.classList.toggle('on', !t.url);
   if(!t.url){ ntp.innerHTML = ntpHtml(t.incog); }
@@ -429,6 +459,7 @@ function render(){
   $('#urlText').innerHTML = urlMarkup(t);
   $('#oInput').placeholder = 'Search ' + engine().name + ' or type URL';
   applyDesktop(t);
+  saveTabs();
 }
 function urlMarkup(t){
   if(!t.url) return '';
@@ -452,11 +483,11 @@ addEventListener('resize', () => { const t = cur(); if(t) applyDesktop(t); });
 function addHistory(t){
   if(!t.url || t.incog) return;
   let h = store.get('history', []).filter(x => x.url !== t.url);
-  h.unshift({ url: t.url, title: t.title, t: Date.now() }); store.set('history', h.slice(0, 200));
+  h.unshift({ url: t.url, title: t.title, t: Date.now() }); store.set('history', h.slice(0, 5000));
 }
 function saveSearch(q){
   let s = store.get('searches', []).filter(x => x.toLowerCase() !== q.toLowerCase());
-  s.unshift(q); store.set('searches', s.slice(0, 30));
+  s.unshift(q); store.set('searches', s.slice(0, 200));
 }
 function toggleBookmark(){
   const t = cur(); if(!t.url) return;
@@ -470,11 +501,11 @@ function openPanel(kind){
   const key = kind === 'history' ? 'history' : 'bookmarks';
   $('#pTitle').textContent = kind === 'history' ? 'History' : 'Bookmarks';
   const list = store.get(key, []);
-  $('#plist').innerHTML = list.length ? list.map(h => '<div class="orow"><button class="main" data-u="' + esc(h.url) + '">' + icon(kind === 'history' ? 'history' : 'star') + '<span class="t"><b>' + esc(h.title || hostOf(h.url)) + '</b><small>' + esc(hostOf(h.url)) + '</small></span></button></div>').join('') : '<div class="empty">' + (kind === 'history' ? 'No history here' : 'No bookmarks yet') + '</div>';
+  $('#plist').innerHTML = list.length ? list.map(h => '<div class="orow"><button class="main" data-u="' + esc(h.url) + '">' + icon(kind === 'history' ? 'history' : 'star') + '<span class="t"><b>' + esc(h.title || hostOf(h.url)) + '</b><small>' + esc(hostOf(h.url)) + '</small></span></button><button class="fill" data-del="' + esc(h.url) + '" aria-label="Remove">' + icon('close') + '</button></div>').join('') : '<div class="empty">' + (kind === 'history' ? 'No history here' : 'No bookmarks yet') + '</div>';
   $('#pClear').style.display = list.length ? '' : 'none'; $('#pClear').dataset.k = key;
   $('#panel').classList.add('on');
 }
-$('#plist').addEventListener('click', e => { const r = e.target.closest('[data-u]'); if(r){ $('#panel').classList.remove('on'); go(cur(), r.dataset.u); } });
+$('#plist').addEventListener('click', e => { const dl = e.target.closest('[data-del]'); if(dl){ const k = $('#pClear').dataset.k; store.set(k, store.get(k, []).filter(x => x.url !== dl.dataset.del)); openPanel(k === 'history' ? 'history' : 'bookmarks'); return; } const r = e.target.closest('[data-u]'); if(r){ $('#panel').classList.remove('on'); go(cur(), r.dataset.u); } });
 $('#pClose').onclick = () => $('#panel').classList.remove('on');
 $('#pClear').onclick = () => { store.set($('#pClear').dataset.k, []); openPanel($('#pClear').dataset.k === 'history' ? 'history' : 'bookmarks'); };
 
@@ -483,7 +514,7 @@ const oIn = $('#oInput');
 function openOmni(){
   const t = cur();
   $('#omniLayer').classList.add('on');
-  oIn.value = t.url && !/privacy-policy/.test(t.url) ? t.url : '';
+  oIn.value = t.url || '';
   buildSuggest(oIn.value);
   setTimeout(() => { oIn.focus(); oIn.select(); }, 60);
 }
@@ -545,7 +576,7 @@ function menuMain(){
   h += mrow('mNew', 'newtab', 'New tab') + mrow('mInc', 'incog', 'New Incognito tab') + '<div class="msep"></div>' +
     mrow('mHist', 'history', 'History') + mrow('mDel', 'delete', 'Delete browsing data') + '<div class="msep"></div>' + mrow('mBook', 'star', 'Bookmarks');
   if(onPage) h += mrow('mDesk', 'desktop', 'Desktop site', '<span class="chk' + (t.desktop ? ' on' : '') + '"></span>') + mrow('mOpen', 'open', 'Open in browser');
-  if(deferredInstall) h += mrow('mInstall', 'add', 'Install app');
+  if(!isStandalone()) h += mrow('mInstall', 'add', isIOS() ? 'Add to Home Screen' : 'Install app');
   h += '<div class="msep"></div>' + mrow('mSet', 'gear', 'Settings') + mrow('mHelp', 'help', 'Help &amp; feedback');
   return h;
 }
@@ -566,12 +597,31 @@ $('#menu').addEventListener('click', e => {
     mHist: () => openPanel('history'), mBook: () => openPanel('bookmarks'), mDel: clearDataDialog,
     mDesk: () => { const t = cur(); t.desktop = !t.desktop; if(t.url) go(t, t.url, false); render(); },
     mOpen: () => { const t = cur(); if(t.url) window.open(t.url, '_blank', 'noopener'); },
-    mInstall: () => { if(deferredInstall){ deferredInstall.prompt(); deferredInstall = null; } },
+    mInstall: installApp,
     mSet: openSettings, mHelp: aboutDialog, mCloseAll: closeAllTabs
   })[b.id];
   if(!act) return; closeMenu(); act();
 });
-addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; });
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function installApp(){
+  if(deferredInstall){ const p = deferredInstall; deferredInstall = null; hideInstall(); p.prompt(); return; }
+  if(isIOS()) dialog('Add to Home Screen', '<p>Tap the <b>Share</b> button in Safari, then choose <b>Add to Home Screen</b>.</p>', [['Got it']]);
+  else dialog('Install app', '<p>Open your browser menu (⋮) and choose <b>Install app</b> or <b>Add to Home screen</b>.</p>', [['Got it']]);
+}
+function showInstall(){
+  if(isStandalone() || $('#instBar').classList.contains('on')) return;
+  let last = 0; try{ last = +(localStorage.getItem('install_dismissed') || 0); }catch(e){}
+  if(Date.now() - last < 7 * 864e5) return;
+  if(isIOS()){ $('#instT').textContent = 'Add to Home Screen'; $('#instS').innerHTML = 'Tap <b>Share</b>, then <b>Add to Home Screen</b> to install Browser App.'; $('#instGo').style.display = 'none'; }
+  $('#instBar').classList.add('on');
+}
+function hideInstall(){ $('#instBar').classList.remove('on'); }
+$('#instNo').onclick = () => { try{ localStorage.setItem('install_dismissed', Date.now()); }catch(e){} hideInstall(); };
+$('#instGo').onclick = installApp;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; setTimeout(showInstall, 1500); });
+addEventListener('appinstalled', () => { deferredInstall = null; hideInstall(); toast('App installed'); });
+if(isIOS() && !isStandalone()) setTimeout(showInstall, 3000);
 function share(){
   const t = cur(); if(!t.url){ toast('Nothing to share'); return; }
   if(navigator.share) navigator.share({ title: t.title, url: t.url }).catch(() => {});
@@ -631,7 +681,7 @@ function clearDataDialog(){
   $('#dbox').querySelectorAll('[data-k]').forEach(o => o.addEventListener('click', ev => { ev.stopPropagation(); o.querySelector('.chk').classList.toggle('on'); }));
 }
 function aboutDialog(){
-  dialog('About Browser', '<p>Browser App · Version 2.0</p><p>A fast, simple browser. Your history stays on this device.</p>', [['Privacy policy', () => { newTab('privacy-policy.html'); $('#settings').classList.remove('on'); }], ['Close']]);
+  dialog('About Browser', '<p>Browser App · Version 4.0</p><p>A fast, simple browser. Your tabs, history and searches stay on this device.</p>', [['Close']]);
 }
 
 /* ---------- settings ---------- */
@@ -639,8 +689,8 @@ const THEME_NAMES = { system:'System default', light:'Light', dark:'Dark' };
 function buildSettings(){
   const q = ($('#sInput').value || '').trim().toLowerCase();
   const groups = [
-    ['Basics', [['engine','Search engine', engine().name, engineDialog], ['privacy','Privacy and security','Delete browsing data, privacy policy', privacyDialog]]],
-    ['Advanced', [['home','Homepage', settings.homeOn ? 'On' : 'Off', homeDialog], ['appearance','Appearance', THEME_NAMES[settings.theme], themeDialog], ['about','About Browser','Version 2.0', aboutDialog]]]
+    ['Basics', [['engine','Search engine', engine().name, engineDialog], ['privacy','Privacy and security','Delete browsing data', clearDataDialog]]],
+    ['Advanced', [['home','Homepage', settings.homeOn ? 'On' : 'Off', homeDialog], ['appearance','Appearance', THEME_NAMES[settings.theme], themeDialog], ['about','About Browser','Version 4.0', aboutDialog]]]
   ];
   let h = ''; const handlers = {};
   groups.forEach(([label, rows]) => {
@@ -649,11 +699,6 @@ function buildSettings(){
     rows.forEach((r, i) => { handlers[r[0]] = r[3]; h += '<button class="srow' + (i === 0 ? ' f' : '') + (i === rows.length - 1 ? ' l' : '') + '" data-s="' + r[0] + '"><b>' + r[1] + '</b><small>' + esc(r[2]) + '</small></button>'; });
   });
   $('#sBody').innerHTML = h || '<div class="empty">No results</div>'; buildSettings.h = handlers;
-}
-function privacyDialog(){
-  dialog('Privacy and security', '<button class="opt" id="pvDel">Delete browsing data</button><button class="opt" id="pvPol">Privacy policy</button>', [['Close']]);
-  $('#pvDel').onclick = () => { closeDialog(); clearDataDialog(); };
-  $('#pvPol').onclick = () => { closeDialog(); $('#settings').classList.remove('on'); newTab('privacy-policy.html'); };
 }
 $('#sBody').addEventListener('click', e => { const r = e.target.closest('[data-s]'); if(r && buildSettings.h[r.dataset.s]) buildSettings.h[r.dataset.s](); });
 $('#sInput').addEventListener('input', buildSettings);
@@ -682,25 +727,8 @@ addEventListener('popstate', () => {
   if(handled) history.pushState({ cb: 1 }, '');
 });
 
-/* ---------- Firebase: optional shortcut tile ---------- */
-function handleValue(val){
-  const o = (val && typeof val === 'object') ? val : { url: val };
-  const u = o.enabled === false ? null : safeUrl(o.url), old = fbHome;
-  fbHome = u;
-  try{ if(u) localStorage.setItem('browser_home', u); else localStorage.removeItem('browser_home'); }catch(e){}
-  const t = tabs[0]; if(!t || t.incog) return;
-  const pristine = t.hist.length === 0 || (t.hist.length === 1 && t.hist[0] === old);
-  if(u && u !== old && pristine) go(t, u);
-  else if(!u && old && t.hist.length === 1 && t.hist[0] === old) goStart(t);
-}
-newTab();
-try{ const c = safeUrl(localStorage.getItem('browser_home')); if(c){ fbHome = c; go(cur(), c); } }catch(e){}
-try{
-  if(window.firebase){
-    firebase.initializeApp(FB_CONFIG);
-    firebase.database().ref(DB_PATH).on('value', s => handleValue(s.val()), () => {});
-  }
-}catch(e){}
+/* ---------- start ---------- */
+if(!restoreTabs()) newTab();
 if('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 </script>
 </body>
