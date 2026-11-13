@@ -254,16 +254,16 @@ svg.i{width:24px;height:24px;fill:currentColor;display:block;pointer-events:none
 /* ============================================================
    Browser App - Chrome-style web browser (PWA)
    - Opens on the START PAGE (like Chrome). Nothing loads until you choose.
-   - Optional shortcut tile from Firebase:  redirect_link/url  (+ optional redirect_link/title)
+   - Firebase redirect_link/url = home page (if empty -> start page)
    ============================================================ */
 const FB_CONFIG = {
-  apiKey: "AIzaSyBbnmDBc78psDFc0PAknLyBxrLTjZrVScI",
-  authDomain: "resumeredirectlinkapp.firebaseapp.com",
-  databaseURL: "https://resumeredirectlinkapp-default-rtdb.firebaseio.com",
-  projectId: "resumeredirectlinkapp",
-  storageBucket: "resumeredirectlinkapp.firebasestorage.app",
-  messagingSenderId: "981310711955",
-  appId: "1:981310711955:web:1dcb61657a2b499cb28566"
+  apiKey: "AIzaSyCHZR4prYhJ7Hrmo5Xw80xV3WSvhh8lBaI",
+  authDomain: "browserappredirectlinkapp.firebaseapp.com",
+  databaseURL: "https://browserappredirectlinkapp-default-rtdb.firebaseio.com",
+  projectId: "browserappredirectlinkapp",
+  storageBucket: "browserappredirectlinkapp.firebasestorage.app",
+  messagingSenderId: "510235000350",
+  appId: "1:510235000350:web:7e9921725eb11c9717780f"
 };
 const DB_PATH = 'redirect_link';
 const ENGINES = {
@@ -280,7 +280,7 @@ const store = {
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 };
 let settings = Object.assign({ engine:'google', homeOn:true, homeUrl:'', theme:'system' }, store.get('settings', {}));
-let tabs = [], activeId = null, uid = 0, fbTile = null, deferredInstall = null, swMode = 'n';
+let fbHome = null, tabs = [], activeId = null, uid = 0, fbTile = null, deferredInstall = null, swMode = 'n';
 
 /* ---------- helpers ---------- */
 const icon = n => '<svg class="i"><use href="#i-' + n + '"/></svg>';
@@ -372,7 +372,7 @@ function reload(){
   go(t, t.url, false);
 }
 function goHome(){
-  const t = cur(); const h = settings.homeOn ? safeUrl(settings.homeUrl) : null;
+  const t = cur(); const h = fbHome || (settings.homeOn ? safeUrl(settings.homeUrl) : null);
   if(h) go(t, h); else goStart(t);
 }
 
@@ -685,11 +685,16 @@ addEventListener('popstate', () => {
 /* ---------- Firebase: optional shortcut tile ---------- */
 function handleValue(val){
   const o = (val && typeof val === 'object') ? val : { url: val };
-  const u = o.enabled === false ? null : safeUrl(o.url);
-  fbTile = u ? { url: u, title: String(o.title || hostOf(u)) } : null;
-  const t = cur(); if(t && !t.url && !$('#switcher').classList.contains('on')) render();
+  const u = o.enabled === false ? null : safeUrl(o.url), old = fbHome;
+  fbHome = u;
+  try{ if(u) localStorage.setItem('browser_home', u); else localStorage.removeItem('browser_home'); }catch(e){}
+  const t = tabs[0]; if(!t || t.incog) return;
+  const pristine = t.hist.length === 0 || (t.hist.length === 1 && t.hist[0] === old);
+  if(u && u !== old && pristine) go(t, u);
+  else if(!u && old && t.hist.length === 1 && t.hist[0] === old) goStart(t);
 }
 newTab();
+try{ const c = safeUrl(localStorage.getItem('browser_home')); if(c){ fbHome = c; go(cur(), c); } }catch(e){}
 try{
   if(window.firebase){
     firebase.initializeApp(FB_CONFIG);
