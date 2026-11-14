@@ -1,5 +1,5 @@
-const CACHE='browser-app-v4',ROOT=self.registration.scope;
-const FILES=['','index.html','privacy-policy.html','manifest.json','icon-192.png','icon-512.png'].map(f=>ROOT+f);
+const CACHE='browser-app-v5',ROOT=self.registration.scope;
+const FILES=['','index.html','shortcut.html','privacy-policy.html','manifest.json','icon-192.png','icon-512.png'].map(f=>ROOT+f);
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>Promise.allSettled(FILES.map(u=>c.add(u)))).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{

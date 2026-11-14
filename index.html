@@ -196,6 +196,20 @@ svg.i{width:24px;height:24px;fill:currentColor;display:block;pointer-events:none
 .ibtns{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
 .ibtns button{padding:12px 24px;border-radius:22px;font-weight:500;font-size:16px;color:var(--blue)}
 .ibtns #instYes{background:var(--blue);color:var(--bg)}
+.dbtns{flex-wrap:wrap}
+#lens{z-index:65}
+#lensBody{flex:1;overflow:auto;padding:0 14px 28px}
+.lensbtn{width:100%;height:58px;border:1px solid var(--line);border-radius:29px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:20px;margin:10px 0 22px}
+.lrow{display:flex;align-items:center;justify-content:space-between;padding:6px 4px 10px}
+.lrow .dd{font-size:26px;display:flex;align-items:center;gap:6px}
+.lrow .va{color:var(--blue);font-size:19px}
+.lgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.lgrid .th{aspect-ratio:1;border-radius:16px;background-color:var(--card);background-size:cover;background-position:center;display:grid;place-items:center;color:var(--tx2)}
+.lgrid .th svg{width:34px;height:34px}
+.lsec{font-size:26px;padding:22px 4px 12px}
+.lprev img{width:100%;max-height:58dvh;object-fit:contain;border-radius:20px;background:var(--card);display:block}
+.lprev .pbtn,.lprev .sbtn{text-align:center}.lprev .pbtn{width:100%;height:54px;border-radius:27px;background:var(--blue);color:var(--bg);font-size:18px;font-weight:500;margin-top:18px}
+.lprev .sbtn{width:100%;height:54px;border-radius:27px;border:1px solid var(--line);font-size:17px;margin-top:10px}
 </style>
 </head>
 <body>
@@ -226,6 +240,7 @@ svg.i{width:24px;height:24px;fill:currentColor;display:block;pointer-events:none
 <symbol id="i-nw" viewBox="0 0 24 24"><path d="M5,15h2V8.41L18.59,20 20,18.59 8.41,7H15V5H5v10z"/></symbol>
 <symbol id="i-person" viewBox="0 0 24 24"><path d="M12,12c2.21,0 4,-1.79 4,-4s-1.79,-4 -4,-4 -4,1.79 -4,4 1.79,4 4,4zM12,14c-2.67,0 -8,1.34 -8,4v2h16v-2c0,-2.66 -5.33,-4 -8,-4z"/></symbol>
 <symbol id="i-brush" viewBox="0 0 24 24"><path d="M7,14c-1.66,0 -3,1.34 -3,3 0,1.31 -1.16,2 -2,2 0.92,1.22 2.49,2 4,2 2.21,0 4,-1.79 4,-4 0,-1.66 -1.34,-3 -3,-3zM20.71,4.63l-1.34,-1.34c-0.39,-0.39 -1.02,-0.39 -1.41,0L9,12.25 11.75,15 20.71,6.04c0.39,-0.39 0.39,-1.02 0,-1.41z"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="M7.41,8.59L12,13.17l4.59,-4.58L18,10l-6,6 -6,-6 1.41,-1.41z"/></symbol>
 <symbol id="i-check" viewBox="0 0 24 24"><path d="M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z"/></symbol>
 </svg>
 
@@ -287,6 +302,12 @@ svg.i{width:24px;height:24px;fill:currentColor;display:block;pointer-events:none
   </section>
 
   <div id="inst"><div class="isheet"><div class="ihead"><img src="icon-192.png" alt=""><div><b>Browser App</b><small id="instHost"></small></div></div><p>Install this app on your device for quick access. It opens in its own window and works like any other app.</p><div class="ibtns"><button id="instNo">Not now</button><button id="instYes">Install</button></div></div></div>
+  <section class="full" id="lens">
+    <div class="fh"><button class="ib" id="lensBackBtn" aria-label="Back"><svg class="i"><use href="#i-back"/></svg></button><h1 style="text-align:center;font-size:30px;padding:0">Lens</h1><button class="ib" id="lensMore" aria-label="More options"><svg class="i"><use href="#i-more"/></svg></button></div>
+    <div id="lensBody"></div>
+    <input type="file" id="lensCam" accept="image/*" capture="environment" hidden>
+    <input type="file" id="lensPick" accept="image/*" hidden>
+  </section>
   <div id="dlg"><div class="dbox" id="dbox"></div></div>
   <div id="toast"></div>
 </div>
@@ -297,6 +318,7 @@ svg.i{width:24px;height:24px;fill:currentColor;display:block;pointer-events:none
    locally on the user's device (localStorage): tabs, history,
    bookmarks, shortcuts, searches and settings. No accounts, no servers.
    ============================================================ */
+if(window.top !== window.self){ document.body.innerHTML = '<p style="padding:24px;font-family:sans-serif">Browser App can’t open inside itself.</p>'; throw new Error('framed'); }
 const ENGINES = {
   google:{name:'Google', url:'https://www.google.com/search?igu=1&q='},
   bing:{name:'Bing', url:'https://www.bing.com/search?q='},
@@ -361,7 +383,7 @@ function newTab(url, incog){
 function restoreTabs(){
   const s = store.get('tabs', null);
   if(s && s.list && s.list.length){
-    s.list.forEach(x => { tabs.push({ id: x.id, url: x.url || '', title: x.title || 'New tab', hist: x.hist || [], idx: (x.idx === undefined ? -1 : x.idx), loading:false, desktop: !!x.desktop, frame:null, incog:false }); uid = Math.max(uid, x.id); });
+    s.list.forEach(x => { if(x.url && ownPage(x.url)){ x.url = ''; x.hist = []; x.idx = -1; x.title = 'New tab'; } tabs.push({ id: x.id, url: x.url || '', title: x.title || 'New tab', hist: (x.hist || []).filter(h => !ownPage(h)), idx: (x.idx === undefined ? -1 : x.idx), loading:false, desktop: !!x.desktop, frame:null, incog:false }); uid = Math.max(uid, x.id); });
     activeId = tabs.some(t => t.id === s.active) ? s.active : tabs[0].id; render();
   }else newTab();
 }
@@ -372,8 +394,9 @@ function ensureFrame(t){
   f.setAttribute('allow', 'camera *; microphone *; geolocation *; fullscreen *; clipboard-write *; clipboard-read *; autoplay *; web-share *; downloads *');
   f.setAttribute('allowfullscreen', '');
   f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-  f.onload = () => onFrameLoad(t, f);
-  $('#frames').appendChild(f); t.frame = f; return f;
+  t.frame = f;
+  f.onload = () => { const a = f.getAttribute('src'); if(a && a !== 'about:blank') onFrameLoad(t, f); };
+  $('#frames').appendChild(f); return f;
 }
 function onFrameLoad(t, f){
   if(!t.url) return;
@@ -384,8 +407,10 @@ function onFrameLoad(t, f){
   }catch(e){}
   addHistory(t); finishProgress(t); render();
 }
+const ownPage = u => { try{ const x = new URL(u); return x.origin === location.origin && !/privacy-policy|shortcut/.test(x.pathname); }catch(e){ return false; } };
 function go(t, url, push = true){
   const u = safeUrl(url); if(!u) return;
+  if(ownPage(u)){ toast('This is Browser App itself'); if(t.url && ownPage(t.url)) goStart(t); else render(); return; }
   if(push){ t.hist = t.hist.slice(0, t.idx + 1); t.hist.push(u); t.idx = t.hist.length - 1; }
   t.url = u; t.title = hostOf(u); t.loading = true;
   ensureFrame(t).src = u;
@@ -466,13 +491,14 @@ $('#ntp').addEventListener('click', e => {
   if(lpFired){ lpFired = false; return; }
   const sc = e.target.closest('.tile[data-i]'); if(sc){ const s = getShortcuts()[+sc.dataset.i]; if(s) go(cur(), s.url); return; }
   const a = e.target.closest('[data-a]'); if(!a) return;
-  ({ omni: () => openOmni(), newtab: () => newTab(null, cur().incog), mic: () => { openOmni(); voice(); }, lens: () => window.open('https://lens.google.com/', '_blank', 'noopener'),
+  ({ omni: () => openOmni(), newtab: () => newTab(null, cur().incog), mic: () => { openOmni(); voice(); }, lens: () => openLens(),
      ai: () => go(cur(), 'https://www.google.com/search?udm=50&igu=1'), incog: () => newTab(null, true), theme: () => themeDialog(), addsc: () => shortcutDialog(-1) })[a.dataset.a]();
 });
 function shortcutDialog(i, preset){
   const list = getShortcuts(), s = i >= 0 ? list[i] : (preset || { title:'', url:'' });
   const btns = [['Cancel']];
   if(i >= 0) btns.push(['Remove', () => { list.splice(i, 1); store.set('shortcuts', list); render(); }]);
+  btns.push(['Add to Home screen', () => { const raw = $('#scUrl').value.trim(); const url = isUrlLike(raw) ? normalize(raw) : null; return openHomeShortcut($('#scName').value.trim(), url); }]);
   btns.push(['Done', () => {
     const title = $('#scName').value.trim(), raw = $('#scUrl').value.trim(), url = normalize(raw);
     if(!raw || !isUrlLike(raw) || !url){ toast('Enter a valid web address'); return false; }
@@ -624,7 +650,7 @@ $('#olist').addEventListener('click', e => {
 });
 $('#oempty').addEventListener('click', closeOmni);
 $('#oPlus').onclick = () => { closeOmni(); newTab(null, cur().incog); };
-$('#oLens').onclick = () => window.open('https://lens.google.com/', '_blank', 'noopener');
+$('#oLens').onclick = () => { closeOmni(); openLens(); };
 $('#oMic').onclick = voice;
 function voice(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -650,7 +676,7 @@ function menuMain(){
     '<button class="mc" id="mReload" ' + (onPage ? '' : 'disabled') + ' aria-label="Reload">' + icon(t.loading ? 'close' : 'refresh') + '</button></div>';
   h += mrow('mNew', 'newtab', 'New tab') + mrow('mInc', 'incog', 'New Incognito tab') + '<div class="msep"></div>' +
     mrow('mHist', 'history', 'History') + mrow('mDel', 'delete', 'Delete browsing data') + '<div class="msep"></div>' + mrow('mBook', 'star', 'Bookmarks');
-  if(onPage) h += mrow('mDesk', 'desktop', 'Desktop site', '<span class="chk' + (t.desktop ? ' on' : '') + '"></span>') + mrow('mAddSc', 'add', 'Add shortcut') + mrow('mOpen', 'open', 'Open in browser');
+  if(onPage) h += mrow('mDesk', 'desktop', 'Desktop site', '<span class="chk' + (t.desktop ? ' on' : '') + '"></span>') + mrow('mA2hs', 'add', 'Add to Home screen') + mrow('mOpen', 'open', 'Open in browser');
   if(deferredInstall && !standalone()) h += mrow('mInstall', 'add', 'Install app');
   h += '<div class="msep"></div>' + mrow('mSet', 'gear', 'Settings') + mrow('mCust', 'brush', 'Customize new tab page') + mrow('mHelp', 'help', 'Help &amp; feedback');
   return h;
@@ -671,7 +697,7 @@ $('#menu').addEventListener('click', e => {
     mInc: () => { $('#switcher').classList.remove('on'); newTab(null, true); },
     mHist: () => openPanel('history'), mBook: () => openPanel('bookmarks'), mDel: clearDataDialog,
     mDesk: () => { const t = cur(); t.desktop = !t.desktop; if(t.url) go(t, t.url, false); render(); },
-    mAddSc: () => { const t = cur(); shortcutDialog(-1, { title: t.title, url: t.url }); },
+    mA2hs: () => a2hsDialog(cur()),
     mOpen: () => { const t = cur(); if(t.url) window.open(t.url, '_blank', 'noopener'); },
     mInstall: showInstall, mSet: openSettings, mCust: customizeDialog, mHelp: aboutDialog, mCloseAll: closeAllTabs, mSelTabs: () => { tabSelMode = true; tabSel.clear(); renderSwitcher(); }
   })[b.id];
@@ -797,6 +823,69 @@ function openSettings(){ $('#sInput').value = ''; buildSettings(); $('#settings'
 $('#sClose').onclick = () => $('#settings').classList.remove('on');
 $('#sHelp').onclick = aboutDialog;
 
+/* ---------- Lens (search with a camera photo or a picked image) ---------- */
+let lensFile = null, lensUrl = null;
+function lensRecent(){ return store.get('lensRecent', []); }
+function openLens(){ lensFile = null; renderLens(); $('#lens').classList.add('on'); }
+function lensBack(){ if(lensFile){ lensFile = null; renderLens(); } else $('#lens').classList.remove('on'); }
+function renderLens(){
+  if(lensUrl){ URL.revokeObjectURL(lensUrl); lensUrl = null; }
+  const b = $('#lensBody');
+  if(lensFile){
+    lensUrl = URL.createObjectURL(lensFile);
+    b.innerHTML = '<div class="lprev"><img src="' + lensUrl + '" alt=""><button class="pbtn" id="lensGo">Search with Lens</button><button class="sbtn" id="lensWeb">Open Lens website</button><button class="sbtn" id="lensOther">Choose another image</button></div>';
+    return;
+  }
+  const rec = lensRecent();
+  b.innerHTML = '<button class="lensbtn" id="lensOpenCam">' + icon('lens') + 'Open camera</button>' +
+    '<div class="lrow"><button class="dd" id="lensFolder">Photos' + icon('down') + '</button><button class="va" id="lensAll">View all</button></div>' +
+    '<div class="lgrid"><button class="th" id="lensAdd">' + icon('add') + '</button>' + rec.slice(0, 2).map((r, i) => '<button class="th" data-r="' + i + '" style="background-image:url(' + r + ')"></button>').join('') + '</div>' +
+    (rec.length > 2 ? '<div class="lsec">Images</div><div class="lgrid">' + rec.slice(2).map((r, i) => '<button class="th" data-r="' + (i + 2) + '" style="background-image:url(' + r + ')"></button>').join('') + '</div>' : '');
+}
+function lensPicked(file){
+  if(!file) return; lensFile = file; renderLens();
+  const img = new Image(), u = URL.createObjectURL(file);
+  img.onload = () => {
+    const sc = Math.min(1, 480 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+    c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    try{ const d = c.toDataURL('image/jpeg', .7); store.set('lensRecent', [d].concat(lensRecent()).slice(0, 8)); }catch(e){}
+    URL.revokeObjectURL(u);
+  };
+  img.src = u;
+}
+function lensSubmit(){
+  if(!lensFile) return;
+  const f = document.createElement('form'); f.method = 'POST'; f.enctype = 'multipart/form-data'; f.target = '_blank';
+  f.action = 'https://lens.google.com/v3/upload?hl=' + encodeURIComponent((navigator.language || 'en').split('-')[0]) + '&re=df&st=' + Date.now() + '&ep=gsbubb';
+  const inp = document.createElement('input'); inp.type = 'file'; inp.name = 'encoded_image';
+  const dt = new DataTransfer(); dt.items.add(lensFile); inp.files = dt.files; f.appendChild(inp);
+  document.body.appendChild(f); f.submit(); f.remove();
+}
+$('#lensBody').addEventListener('click', e => {
+  const id = (e.target.closest('[id]') || {}).id, r = e.target.closest('[data-r]');
+  if(r){ fetch(lensRecent()[+r.dataset.r]).then(x => x.blob()).then(bl => lensPicked(new File([bl], 'image.jpg', { type: 'image/jpeg' }))); return; }
+  if(id === 'lensOpenCam') $('#lensCam').click();
+  else if(id === 'lensAll' || id === 'lensAdd' || id === 'lensOther') $('#lensPick').click();
+  else if(id === 'lensFolder') radioDialog('Choose from', [['photos','Photos'],['files','Files'],['camera','Camera']], 'photos', v => { if(v === 'camera') $('#lensCam').click(); else $('#lensPick').click(); });
+  else if(id === 'lensGo') lensSubmit();
+  else if(id === 'lensWeb') window.open('https://lens.google.com/', '_blank', 'noopener');
+});
+$('#lensCam').addEventListener('change', e => { lensPicked(e.target.files[0]); e.target.value = ''; });
+$('#lensPick').addEventListener('change', e => { lensPicked(e.target.files[0]); e.target.value = ''; });
+$('#lensBackBtn').onclick = lensBack;
+$('#lensMore').onclick = () => window.open('https://lens.google.com/', '_blank', 'noopener');
+
+/* ---------- Add to Home screen (creates an app-like shortcut for a site) ---------- */
+function openHomeShortcut(name, url){
+  const u = url && safeUrl(url);
+  if(!u || ownPage(u)){ toast('Enter a valid web address'); return false; }
+  window.open('shortcut.html?u=' + encodeURIComponent(u) + '&n=' + encodeURIComponent((name || hostOf(u)).slice(0, 30)), '_blank');
+}
+function a2hsDialog(t){
+  if(!t || !t.url){ toast('Open a page first'); return; }
+  dialog('Add to Home screen', '<p>Create an app shortcut for this site on your phone.</p><input type="text" id="hsName" value="' + esc((t.title || hostOf(t.url)).slice(0, 30)) + '" autocomplete="off">', [['Cancel'], ['Add', () => openHomeShortcut($('#hsName').value.trim(), t.url)]]);
+}
+
 /* ---------- install prompt (like Chrome's "Install app" sheet) ---------- */
 addEventListener('beforeinstallprompt', e => {
   e.preventDefault(); deferredInstall = e;
@@ -823,6 +912,7 @@ addEventListener('popstate', () => {
   else if(on('#dlg')) closeDialog();
   else if(on('#menu')) closeMenu();
   else if(on('#omniLayer')) closeOmni();
+  else if(on('#lens')) lensBack();
   else if(on('#settings')) $('#settings').classList.remove('on');
   else if(on('#panel')){ if(pSelMode){ pSelMode = false; pSel.clear(); renderPanel(); } else $('#panel').classList.remove('on'); }
   else if(on('#switcher')){ if(tabSelMode) exitTabSel(); else $('#switcher').classList.remove('on'); }
