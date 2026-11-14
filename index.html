@@ -452,7 +452,7 @@ function reload(){
 }
 function goHome(){
   const t = cur(), h = settings.homeOn ? safeUrl(settings.homeUrl) : null;
-  if(h) go(t, h); else goStart(t);
+  if(h && !ownPage(h)) go(t, h); else goStart(t);
 }
 
 /* ---------- progress ---------- */
@@ -489,7 +489,7 @@ $('#ntp').addEventListener('pointerdown', e => {
 $('#ntp').addEventListener('contextmenu', e => { if(e.target.closest('.tile[data-i]')) e.preventDefault(); });
 $('#ntp').addEventListener('click', e => {
   if(lpFired){ lpFired = false; return; }
-  const sc = e.target.closest('.tile[data-i]'); if(sc){ const s = getShortcuts()[+sc.dataset.i]; if(s) go(cur(), s.url); return; }
+  const sc = e.target.closest('.tile[data-i]'); if(sc){ const s = getShortcuts()[+sc.dataset.i]; if(s) newTab(s.url); return; }
   const a = e.target.closest('[data-a]'); if(!a) return;
   ({ omni: () => openOmni(), newtab: () => newTab(null, cur().incog), mic: () => { openOmni(); voice(); }, lens: () => openLens(),
      ai: () => go(cur(), 'https://www.google.com/search?udm=50&igu=1'), incog: () => newTab(null, true), theme: () => themeDialog(), addsc: () => shortcutDialog(-1) })[a.dataset.a]();
@@ -498,7 +498,7 @@ function shortcutDialog(i, preset){
   const list = getShortcuts(), s = i >= 0 ? list[i] : (preset || { title:'', url:'' });
   const btns = [['Cancel']];
   if(i >= 0) btns.push(['Remove', () => { list.splice(i, 1); store.set('shortcuts', list); render(); }]);
-  btns.push(['Add to Home screen', () => { const raw = $('#scUrl').value.trim(); const url = isUrlLike(raw) ? normalize(raw) : null; return openHomeShortcut($('#scName').value.trim(), url); }]);
+  btns.push(['Add to Home screen', () => { const raw = $('#scUrl').value.trim(); const url = isUrlLike(raw) ? normalize(raw) : null; const name = $('#scName').value.trim(); const r = openHomeShortcut(name, url); if(r !== false){ const l = getShortcuts(); const item = { title: name || hostOf(url), url }; if(i >= 0) l[i] = item; else if(!l.some(x => x.url === url)) l.push(item); store.set('shortcuts', l); render(); } return r; }]);
   btns.push(['Done', () => {
     const title = $('#scName').value.trim(), raw = $('#scUrl').value.trim(), url = normalize(raw);
     if(!raw || !isUrlLike(raw) || !url){ toast('Enter a valid web address'); return false; }
@@ -697,7 +697,7 @@ $('#menu').addEventListener('click', e => {
     mInc: () => { $('#switcher').classList.remove('on'); newTab(null, true); },
     mHist: () => openPanel('history'), mBook: () => openPanel('bookmarks'), mDel: clearDataDialog,
     mDesk: () => { const t = cur(); t.desktop = !t.desktop; if(t.url) go(t, t.url, false); render(); },
-    mA2hs: () => a2hsDialog(cur()),
+    mA2hs: () => addToHome(cur()),
     mOpen: () => { const t = cur(); if(t.url) window.open(t.url, '_blank', 'noopener'); },
     mInstall: showInstall, mSet: openSettings, mCust: customizeDialog, mHelp: aboutDialog, mCloseAll: closeAllTabs, mSelTabs: () => { tabSelMode = true; tabSel.clear(); renderSwitcher(); }
   })[b.id];
@@ -766,7 +766,7 @@ function engineDialog(){ radioDialog('Search engine', Object.entries(ENGINES).ma
 function addrDialog(){ radioDialog('Address bar', [['top','Top'],['bottom','Bottom']], settings.bb ? 'bottom' : 'top', v => { settings.bb = v === 'bottom'; saveSettings(); applyLayout(); buildSettings(); }); }
 function homeDialog(){
   dialog('Homepage', checkRow('hOn', 'Show home button', settings.homeOn) + '<p style="margin-top:6px">Leave the address empty to open the start page.</p><input type="text" id="hUrl" placeholder="https://example.com" value="' + esc(settings.homeUrl) + '" inputmode="url" autocapitalize="off">',
-    [['Cancel'], ['Save', () => { const v = $('#hUrl').value.trim(); if(v && !(isUrlLike(v) && normalize(v))){ toast('Enter a valid address'); return false; } settings.homeOn = isOn('hOn'); settings.homeUrl = v ? normalize(v) : ''; saveSettings(); buildSettings(); render(); }]]);
+    [['Cancel'], ['Save', () => { const v = $('#hUrl').value.trim(); if(v && !(isUrlLike(v) && normalize(v))){ toast('Enter a valid address'); return false; } if(v && ownPage(normalize(v))){ toast('Choose a different address'); return false; } settings.homeOn = isOn('hOn'); settings.homeUrl = v ? normalize(v) : ''; saveSettings(); buildSettings(); render(); }]]);
   wireChecks();
 }
 function customizeDialog(){
@@ -881,6 +881,12 @@ function openHomeShortcut(name, url){
   if(!u || ownPage(u)){ toast('Enter a valid web address'); return false; }
   window.open('shortcut.html?u=' + encodeURIComponent(u) + '&n=' + encodeURIComponent((name || hostOf(u)).slice(0, 30)), '_blank');
 }
+function addToHome(t){
+  if(!t || !t.url || ownPage(t.url)){ toast('Open a website first'); return; }
+  const list = getShortcuts();
+  if(!list.some(x => x.url === t.url)){ list.push({ title: (t.title || hostOf(t.url)).slice(0, 30), url: t.url }); store.set('shortcuts', list); }
+  if(openHomeShortcut(t.title, t.url) !== false) toast('Added to shortcuts');
+}
 function a2hsDialog(t){
   if(!t || !t.url){ toast('Open a page first'); return; }
   dialog('Add to Home screen', '<p>Create an app shortcut for this site on your phone.</p><input type="text" id="hsName" value="' + esc((t.title || hostOf(t.url)).slice(0, 30)) + '" autocomplete="off">', [['Cancel'], ['Add', () => openHomeShortcut($('#hsName').value.trim(), t.url)]]);
@@ -922,6 +928,8 @@ addEventListener('popstate', () => {
   if(handled) history.pushState({ cb: 1 }, '');
 });
 
+if(settings.homeUrl && ownPage(settings.homeUrl)){ settings.homeUrl = ''; saveSettings(); }
+if(getShortcuts().some(x => ownPage(x.url))) store.set('shortcuts', getShortcuts().filter(x => !ownPage(x.url)));
 applyLayout();
 restoreTabs();
 if('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

@@ -16,10 +16,11 @@ body{background:var(--bg);color:var(--tx);font-family:Roboto,system-ui,Arial,san
 p{color:var(--tx2);font-size:15px;line-height:1.5;margin:16px 0 4px}
 .btns{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 button{font:inherit;border:0;background:none;padding:12px 22px;border-radius:22px;font-weight:500;font-size:16px;color:var(--blue);cursor:pointer}
+#nm{width:100%;font:inherit;font-size:21px;font-weight:500;color:var(--tx);background:transparent;border:0;border-bottom:1px solid var(--tx2);padding:2px 0;outline:0}
 button.pri{background:var(--blue);color:var(--bg)}
 </style></head><body>
 <div class="sheet">
-  <div class="head"><img id="ic" alt=""><div><b id="nm"></b><small id="hs"></small></div></div>
+  <div class="head"><img id="ic" alt=""><div style="flex:1;min-width:0"><input id="nm" type="text" maxlength="30" autocomplete="off" aria-label="Name"><small id="hs"></small></div></div>
   <p id="msg">Add this site to your Home screen so it opens like an app.</p>
   <div class="btns"><button id="no">Cancel</button><button class="pri" id="yes">Add</button></div>
 </div>
@@ -27,14 +28,14 @@ button.pri{background:var(--blue);color:var(--bg)}
 (function(){
   const q = new URLSearchParams(location.search);
   let u = null; try{ const x = new URL(q.get('u') || ''); if(/^https?:$/.test(x.protocol)) u = x.href; }catch(e){}
-  if(!u){ document.getElementById('msg').textContent = 'Invalid link.'; document.getElementById('yes').style.display = 'none'; return; }
+  const $ = id => document.getElementById(id);
+  if(!u){ $('msg').textContent = 'Invalid link.'; $('yes').style.display = 'none'; $('nm').style.display = 'none'; $('no').onclick = () => location.replace('./'); return; }
   const host = new URL(u).host.replace(/^www\./,'');
-  const name = (q.get('n') || host).slice(0, 30);
   const standalone = matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: minimal-ui)').matches || navigator.standalone === true;
   if(standalone){ location.replace(u); return; }
+  $('nm').value = (q.get('n') || host).slice(0, 30); $('hs').textContent = host;
 
-  // letter icon for this site
-  function icon(size){
+  function icon(size, name){
     const c = document.createElement('canvas'); c.width = c.height = size; const g = c.getContext('2d');
     let h = 0; for(const ch of host) h = (h * 31 + ch.charCodeAt(0)) % 360;
     g.fillStyle = 'hsl(' + h + ',45%,42%)'; g.fillRect(0, 0, size, size);
@@ -42,26 +43,29 @@ button.pri{background:var(--blue);color:var(--bg)}
     g.fillText((name[0] || '?').toUpperCase(), size / 2, size / 2 + size * .03);
     return c.toDataURL('image/png');
   }
-  const i192 = icon(192), i512 = icon(512);
-  document.getElementById('ic').src = i192;
-  document.getElementById('nm').textContent = name; document.getElementById('hs').textContent = host;
-  document.title = name;
-  const base = location.origin + location.pathname, start = base + '?u=' + encodeURIComponent(u) + '&n=' + encodeURIComponent(name);
-  const manifest = { name: name, short_name: name.slice(0, 12), id: start, start_url: start, scope: base, display: 'standalone', background_color: '#121419', theme_color: '#121419',
-    icons: [ { src: i192, sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: i512, sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: i512, sizes: '512x512', type: 'image/png', purpose: 'maskable' } ] };
-  const link = document.createElement('link'); link.rel = 'manifest';
-  link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' }));
-  document.head.appendChild(link);
-  const t = document.createElement('link'); t.rel = 'apple-touch-icon'; t.href = i192; document.head.appendChild(t);
+  let mLink = null, tLink = null;
+  function build(){
+    const name = ($('nm').value.trim() || host).slice(0, 30);
+    const i192 = icon(192, name), i512 = icon(512, name);
+    $('ic').src = i192; document.title = name;
+    const base = location.origin + location.pathname, start = base + '?u=' + encodeURIComponent(u) + '&n=' + encodeURIComponent(name);
+    const manifest = { name: name, short_name: name.slice(0, 12), id: start, start_url: start, scope: base, display: 'standalone', background_color: '#121419', theme_color: '#121419',
+      icons: [ { src: i192, sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: i512, sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: i512, sizes: '512x512', type: 'image/png', purpose: 'maskable' } ] };
+    if(mLink) mLink.remove(); if(tLink) tLink.remove();
+    mLink = document.createElement('link'); mLink.rel = 'manifest'; mLink.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' })); document.head.appendChild(mLink);
+    tLink = document.createElement('link'); tLink.rel = 'apple-touch-icon'; tLink.href = i192; document.head.appendChild(tLink);
+  }
+  build();
+  let t = null; $('nm').addEventListener('input', () => { clearTimeout(t); t = setTimeout(build, 400); });
 
   let deferred = null;
   addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; });
-  addEventListener('appinstalled', () => { document.getElementById('msg').textContent = 'Added to your Home screen.'; document.getElementById('yes').style.display = 'none'; document.getElementById('no').textContent = 'Close'; });
-  document.getElementById('yes').onclick = async () => {
+  addEventListener('appinstalled', () => { $('msg').textContent = 'Added to your Home screen.'; $('yes').style.display = 'none'; $('nm').disabled = true; $('no').textContent = 'Back to Browser'; });
+  $('yes').onclick = async () => {
     if(deferred){ try{ deferred.prompt(); await deferred.userChoice; }catch(e){} deferred = null; }
-    else document.getElementById('msg').textContent = 'Open the browser menu (⋮) and tap “Add to Home screen” or “Install app”.';
+    else $('msg').textContent = 'Open the browser menu (⋮) and tap “Add to Home screen” or “Install app”.';
   };
-  document.getElementById('no').onclick = () => { if(history.length > 1) history.back(); else location.replace(u); };
+  $('no').onclick = () => { try{ window.close(); }catch(e){} setTimeout(() => location.replace('./'), 150); };
 })();
 </script>
 </body></html>
